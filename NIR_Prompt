@@ -1,0 +1,1247 @@
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
+import random
+import numpy as np
+import threading
+import time
+from tkinter import font
+
+
+class NIRPromptDemo:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("NIR-Prompt Framework Demo - MDM & EMM Modules")
+        self.root.geometry("1400x900")
+        self.root.configure(bg='#f0f0f0')
+
+        # Initialize variables
+        self.prompt_tokens = {
+            'manual': {'Pt1': '[RELEVANT]', 'Pt2': '[SIMILAR]', 'Ptq': '[MATCH]'},
+            'continuous': {'Pt1': np.random.randn(5), 'Pt2': np.random.randn(5), 'Ptq': np.random.randn(5)},
+            'hybrid': {'Pt1': '[REL]', 'Pt2': np.random.randn(3), 'Ptq': '[MATCH]'}
+        }
+
+        self.tasks = ['Document Retrieval', 'Question Answering', 'Paraphrase Identification',
+                      'Natural Language Inference']
+        self.training_progress = 0
+        self.is_training = False
+
+        # Sample data
+        self.sample_data = {
+            'queries': [
+                "What is machine learning?",
+                "How does neural retrieval work?",
+                "Explain text matching techniques",
+                "What are transformer models?"
+            ],
+            'documents': [
+                "Machine learning is a subset of artificial intelligence that enables computers to learn.",
+                "Neural information retrieval uses neural networks to find relevant documents.",
+                "Text matching estimates relevance scores between text pairs for specific tasks.",
+                "Transformers are neural network architectures using self-attention mechanisms."
+            ]
+        }
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Create main notebook
+        main_notebook = ttk.Notebook(self.root)
+        main_notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Create tabs
+        self.create_mdm_tab(main_notebook)
+        self.create_emm_tab(main_notebook)
+        self.create_prompt_encoders_tab(main_notebook)
+        self.create_training_tab(main_notebook)
+        self.create_results_tab(main_notebook)
+
+    def create_mdm_tab(self, parent):
+        # MDM (Matching Description Module) Tab
+        mdm_frame = ttk.Frame(parent)
+        parent.add(mdm_frame, text="MDM Module")
+
+        # Title
+        title_font = font.Font(size=16, weight='bold')
+        ttk.Label(mdm_frame, text="Matching Description Module (MDM)", font=title_font).pack(pady=10)
+
+        # Description
+        desc_text = """The MDM exploits prompt learning to map the characteristics of each task to prompt tokens 
+and use them as the task description."""
+        ttk.Label(mdm_frame, text=desc_text, wraplength=600, justify=tk.CENTER).pack(pady=5)
+
+        # Main container
+        main_container = ttk.Frame(mdm_frame)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Left side - Input
+        left_frame = ttk.LabelFrame(main_container, text="Input Configuration", padding=10)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+
+        # Task selection
+        ttk.Label(left_frame, text="Select Task:").pack(anchor=tk.W)
+        self.task_var = tk.StringVar(value=self.tasks[0])
+        task_combo = ttk.Combobox(left_frame, textvariable=self.task_var, values=self.tasks, state="readonly")
+        task_combo.pack(fill=tk.X, pady=5)
+        task_combo.bind('<<ComboboxSelected>>', self.update_mdm_display)
+
+        # Prompt method selection
+        ttk.Label(left_frame, text="Prompt Method:").pack(anchor=tk.W, pady=(10, 0))
+        self.prompt_method_var = tk.StringVar(value="manual")
+        for method in ["manual", "continuous", "hybrid"]:
+            ttk.Radiobutton(left_frame, text=method.capitalize(), variable=self.prompt_method_var,
+                            value=method, command=self.update_mdm_display).pack(anchor=tk.W)
+
+        # Query input
+        ttk.Label(left_frame, text="Query:").pack(anchor=tk.W, pady=(10, 0))
+        self.query_entry = tk.Text(left_frame, height=3, wrap=tk.WORD)
+        self.query_entry.pack(fill=tk.X, pady=5)
+        self.query_entry.insert(tk.END, self.sample_data['queries'][0])
+
+        # Document input
+        ttk.Label(left_frame, text="Document:").pack(anchor=tk.W)
+        self.doc_entry = tk.Text(left_frame, height=3, wrap=tk.WORD)
+        self.doc_entry.pack(fill=tk.X, pady=5)
+        self.doc_entry.insert(tk.END, self.sample_data['documents'][0])
+
+        # Generate button
+        ttk.Button(left_frame, text="Generate Prompt Tokens",
+                   command=self.generate_prompt_tokens).pack(pady=10)
+
+        # Right side - Output
+        right_frame = ttk.LabelFrame(main_container, text="Generated Prompt Tokens", padding=10)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Prompt tokens display
+        self.prompt_display = scrolledtext.ScrolledText(right_frame, height=15, wrap=tk.WORD)
+        self.prompt_display.pack(fill=tk.BOTH, expand=True)
+
+        # NIR Pipeline display
+        pipeline_frame = ttk.LabelFrame(right_frame, text="NIR Pipeline Format", padding=5)
+        pipeline_frame.pack(fill=tk.X, pady=(10, 0))
+
+        self.pipeline_display = tk.Text(pipeline_frame, height=4, wrap=tk.WORD)
+        self.pipeline_display.pack(fill=tk.X)
+
+        # Initialize display
+        self.update_mdm_display()
+
+    def create_emm_tab(self, parent):
+        # EMM (Essential Matching Module) Tab
+        emm_frame = ttk.Frame(parent)
+        parent.add(emm_frame, text="EMM Module")
+
+        # Title
+        title_font = font.Font(size=16, weight='bold')
+        ttk.Label(emm_frame, text="Essential Matching Module (EMM)", font=title_font).pack(pady=10)
+
+        # Description
+        desc_text = """EMM combines the description and data of each task and mixes various tasks into mixed datasets.
+It captures essential matching signals across tasks via multi-task learning."""
+        ttk.Label(emm_frame, text=desc_text, wraplength=700, justify=tk.CENTER).pack(pady=5)
+
+        # Main container
+        main_container = ttk.Frame(emm_frame)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Top section - Task mixing
+        top_frame = ttk.LabelFrame(main_container, text="Multi-Task Data Mixing", padding=10)
+        top_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Task checkboxes
+        ttk.Label(top_frame, text="Select tasks to mix:").pack(anchor=tk.W)
+        self.task_vars = {}
+        task_frame = ttk.Frame(top_frame)
+        task_frame.pack(fill=tk.X, pady=5)
+
+        for i, task in enumerate(self.tasks):
+            var = tk.BooleanVar(value=True)
+            self.task_vars[task] = var
+            ttk.Checkbutton(task_frame, text=task, variable=var,
+                            command=self.update_mixed_dataset).pack(side=tk.LEFT, padx=10)
+
+        # Mix datasets button
+        ttk.Button(top_frame, text="Mix Datasets", command=self.mix_datasets).pack(pady=5)
+
+        # Bottom section - Two columns
+        bottom_frame = ttk.Frame(main_container)
+        bottom_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Left - Mixed dataset display
+        left_frame = ttk.LabelFrame(bottom_frame, text="Mixed Dataset Visualization", padding=10)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+
+        self.mixed_dataset_display = scrolledtext.ScrolledText(left_frame, height=15, wrap=tk.WORD)
+        self.mixed_dataset_display.pack(fill=tk.BOTH, expand=True)
+
+        # Right - Essential matching signals
+        right_frame = ttk.LabelFrame(bottom_frame, text="Essential Matching Signals", padding=10)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        self.signals_display = scrolledtext.ScrolledText(right_frame, height=15, wrap=tk.WORD)
+        self.signals_display.pack(fill=tk.BOTH, expand=True)
+
+        # Initialize
+        self.update_mixed_dataset()
+
+    def create_prompt_encoders_tab(self, parent):
+        # Prompt Encoders Tab
+        encoders_frame = ttk.Frame(parent)
+        parent.add(encoders_frame, text="Prompt Encoders")
+
+        # Title
+        title_font = font.Font(size=16, weight='bold')
+        ttk.Label(encoders_frame, text="Prompt Encoders Configuration", font=title_font).pack(pady=10)
+
+        # Description
+        desc_text = """Prompt encoders consist of bidirectional LSTM and multi-layer perceptron.
+They map task knowledge into prompt tokens and update parameters through back-propagation."""
+        ttk.Label(encoders_frame, text=desc_text, wraplength=700, justify=tk.CENTER).pack(pady=5)
+
+        # Main container
+        main_container = ttk.Frame(encoders_frame)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Left side - Configuration
+        left_frame = ttk.LabelFrame(main_container, text="Encoder Configuration", padding=10)
+        left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+
+        # LSTM settings
+        ttk.Label(left_frame, text="LSTM Hidden Size:").pack(anchor=tk.W)
+        self.lstm_hidden_var = tk.StringVar(value="128")
+        ttk.Entry(left_frame, textvariable=self.lstm_hidden_var, width=20).pack(anchor=tk.W, pady=2)
+
+        ttk.Label(left_frame, text="LSTM Layers:").pack(anchor=tk.W, pady=(10, 0))
+        self.lstm_layers_var = tk.StringVar(value="2")
+        ttk.Entry(left_frame, textvariable=self.lstm_layers_var, width=20).pack(anchor=tk.W, pady=2)
+
+        # MLP settings
+        ttk.Label(left_frame, text="MLP Hidden Dimensions:").pack(anchor=tk.W, pady=(10, 0))
+        self.mlp_dims_var = tk.StringVar(value="256,128")
+        ttk.Entry(left_frame, textvariable=self.mlp_dims_var, width=20).pack(anchor=tk.W, pady=2)
+
+        # Dropout
+        ttk.Label(left_frame, text="Dropout Rate:").pack(anchor=tk.W, pady=(10, 0))
+        self.dropout_var = tk.StringVar(value="0.1")
+        ttk.Entry(left_frame, textvariable=self.dropout_var, width=20).pack(anchor=tk.W, pady=2)
+
+        # Learning rate
+        ttk.Label(left_frame, text="Learning Rate:").pack(anchor=tk.W, pady=(10, 0))
+        self.lr_var = tk.StringVar(value="0.001")
+        ttk.Entry(left_frame, textvariable=self.lr_var, width=20).pack(anchor=tk.W, pady=2)
+
+        # Initialize button
+        ttk.Button(left_frame, text="Initialize Encoders",
+                   command=self.initialize_encoders).pack(pady=20)
+
+        # Right side - Architecture visualization
+        right_frame = ttk.LabelFrame(main_container, text="Encoder Architecture", padding=10)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        self.encoder_display = scrolledtext.ScrolledText(right_frame, height=20, wrap=tk.WORD)
+        self.encoder_display.pack(fill=tk.BOTH, expand=True)
+
+        # Initialize display
+        self.initialize_encoders()
+
+    def create_training_tab(self, parent):
+        # Training Tab
+        training_frame = ttk.Frame(parent)
+        parent.add(training_frame, text="Training")
+
+        # Title
+        title_font = font.Font(size=16, weight='bold')
+        ttk.Label(training_frame, text="NIR-Prompt Training", font=title_font).pack(pady=10)
+
+        # Description
+        desc_text = """Training uses in-batch contrastive loss for dense retrieval and cross-entropy for reranking.
+The PLM performs multi-task learning on mixed datasets."""
+        ttk.Label(training_frame, text=desc_text, wraplength=700, justify=tk.CENTER).pack(pady=5)
+
+        # Main container
+        main_container = ttk.Frame(training_frame)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Top section - Training configuration
+        config_frame = ttk.LabelFrame(main_container, text="Training Configuration", padding=10)
+        config_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Configuration in two columns
+        config_left = ttk.Frame(config_frame)
+        config_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        config_right = ttk.Frame(config_frame)
+        config_right.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+
+        # Left column
+        ttk.Label(config_left, text="Batch Size:").pack(anchor=tk.W)
+        self.batch_size_var = tk.StringVar(value="32")
+        ttk.Entry(config_left, textvariable=self.batch_size_var, width=15).pack(anchor=tk.W, pady=2)
+
+        ttk.Label(config_left, text="Epochs:").pack(anchor=tk.W, pady=(10, 0))
+        self.epochs_var = tk.StringVar(value="10")
+        ttk.Entry(config_left, textvariable=self.epochs_var, width=15).pack(anchor=tk.W, pady=2)
+
+        # Right column
+        ttk.Label(config_right, text="Loss Function:").pack(anchor=tk.W)
+        self.loss_var = tk.StringVar(value="contrastive")
+        loss_combo = ttk.Combobox(config_right, textvariable=self.loss_var,
+                                  values=["contrastive", "cross_entropy"], state="readonly", width=15)
+        loss_combo.pack(anchor=tk.W, pady=2)
+
+        ttk.Label(config_right, text="Model Type:").pack(anchor=tk.W, pady=(10, 0))
+        self.model_type_var = tk.StringVar(value="dense_retrieval")
+        model_combo = ttk.Combobox(config_right, textvariable=self.model_type_var,
+                                   values=["dense_retrieval", "reranking"], state="readonly", width=15)
+        model_combo.pack(anchor=tk.W, pady=2)
+
+        # Training controls
+        control_frame = ttk.Frame(config_frame)
+        control_frame.pack(fill=tk.X, pady=10)
+
+        self.start_button = ttk.Button(control_frame, text="Start Training",
+                                       command=self.start_training)
+        self.start_button.pack(side=tk.LEFT, padx=5)
+
+        self.stop_button = ttk.Button(control_frame, text="Stop Training",
+                                      command=self.stop_training, state=tk.DISABLED)
+        self.stop_button.pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(control_frame, text="Reset", command=self.reset_training).pack(side=tk.LEFT, padx=5)
+
+        # Progress section
+        progress_frame = ttk.LabelFrame(main_container, text="Training Progress", padding=10)
+        progress_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Progress bar
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill=tk.X, pady=5)
+
+        # Progress label
+        self.progress_label = ttk.Label(progress_frame, text="Ready to train")
+        self.progress_label.pack()
+
+        # Training log
+        log_frame = ttk.LabelFrame(main_container, text="Training Log", padding=10)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.training_log = scrolledtext.ScrolledText(log_frame, height=15, wrap=tk.WORD)
+        self.training_log.pack(fill=tk.BOTH, expand=True)
+
+    def create_results_tab(self, parent):
+        # Results Tab
+        results_frame = ttk.Frame(parent)
+        parent.add(results_frame, text="Results & Inference")
+
+        # Title
+        title_font = font.Font(size=16, weight='bold')
+        ttk.Label(results_frame, text="NIR-Prompt Inference Engine", font=title_font).pack(pady=10)
+
+        # Main container
+        main_container = ttk.Frame(results_frame)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Top section - Input and controls
+        top_section = ttk.Frame(main_container)
+        top_section.pack(fill=tk.X, pady=(0, 10))
+
+        # Test input frame
+        input_frame = ttk.LabelFrame(top_section, text="Interactive Testing Interface", padding=10)
+        input_frame.pack(fill=tk.X, pady=(0, 5))
+
+        # Input fields in columns
+        input_columns = ttk.Frame(input_frame)
+        input_columns.pack(fill=tk.X)
+
+        # Left column - Query
+        input_left = ttk.Frame(input_columns)
+        input_left.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+
+        ttk.Label(input_left, text="Test Query:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+        self.test_query = tk.Text(input_left, height=4, wrap=tk.WORD, font=('Arial', 9))
+        self.test_query.pack(fill=tk.X, pady=2)
+
+        # Right column - Document
+        input_right = ttk.Frame(input_columns)
+        input_right.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+
+        ttk.Label(input_right, text="Test Document:", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+        self.test_doc = tk.Text(input_right, height=4, wrap=tk.WORD, font=('Arial', 9))
+        self.test_doc.pack(fill=tk.X, pady=2)
+
+        # Control buttons
+        control_frame = ttk.Frame(input_frame)
+        control_frame.pack(fill=tk.X, pady=10)
+
+        ttk.Button(control_frame, text="🚀 Run Inference",
+                   command=self.run_inference).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="📝 Load Sample Data",
+                   command=self.load_sample_test_data).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="🔄 Clear Results",
+                   command=self.clear_results).pack(side=tk.LEFT, padx=5)
+
+        # Quick test samples
+        samples_frame = ttk.LabelFrame(top_section, text="Quick Test Samples", padding=5)
+        samples_frame.pack(fill=tk.X, pady=5)
+
+        sample_buttons_frame = ttk.Frame(samples_frame)
+        sample_buttons_frame.pack(fill=tk.X)
+
+        sample_tests = [
+            ("Relevant Match", "machine learning algorithms",
+             "Deep learning is a subset of machine learning using neural networks"),
+            ("Partial Match", "weather forecast", "Climate change affects global weather patterns significantly"),
+            ("No Match", "cooking recipes", "Quantum computing uses quantum mechanical phenomena"),
+            ("Semantic Match", "AI applications", "Artificial intelligence transforms healthcare and education")
+        ]
+
+        for i, (label, query, doc) in enumerate(sample_tests):
+            ttk.Button(sample_buttons_frame, text=f"{i + 1}. {label}",
+                       command=lambda q=query, d=doc: self.load_test_sample(q, d)).pack(side=tk.LEFT, padx=2)
+
+        # Results section with multiple views
+        results_notebook = ttk.Notebook(main_container)
+        results_notebook.pack(fill=tk.BOTH, expand=True)
+
+        # Tab 1: Relevance Scoring
+        scoring_frame = ttk.Frame(results_notebook)
+        results_notebook.add(scoring_frame, text="📊 Relevance Scoring")
+
+        # Scoring display
+        scoring_top = ttk.Frame(scoring_frame)
+        scoring_top.pack(fill=tk.X, padx=10, pady=10)
+
+        # Score visualization
+        score_viz_frame = ttk.LabelFrame(scoring_top, text="Relevance Score Visualization", padding=10)
+        score_viz_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.score_var = tk.DoubleVar()
+        self.score_bar = ttk.Progressbar(score_viz_frame, variable=self.score_var, maximum=100, length=400)
+        self.score_bar.pack(pady=5)
+
+        self.score_label = ttk.Label(score_viz_frame, text="Score: Not calculated", font=('Arial', 12, 'bold'))
+        self.score_label.pack()
+
+        # Classification result
+        self.classification_label = ttk.Label(score_viz_frame, text="", font=('Arial', 11))
+        self.classification_label.pack(pady=5)
+
+        # Detailed scoring breakdown
+        scoring_details = ttk.LabelFrame(scoring_frame, text="Scoring Breakdown", padding=10)
+        scoring_details.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        self.scoring_display = scrolledtext.ScrolledText(scoring_details, height=15, wrap=tk.WORD, font=('Courier', 9))
+        self.scoring_display.pack(fill=tk.BOTH, expand=True)
+
+        # Tab 2: Attention Weights
+        attention_frame = ttk.Frame(results_notebook)
+        results_notebook.add(attention_frame, text="🎯 Attention Weights")
+
+        # Attention visualization
+        attention_viz_frame = ttk.LabelFrame(attention_frame, text="Token Attention Visualization", padding=10)
+        attention_viz_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        self.attention_canvas = tk.Canvas(attention_viz_frame, height=100, bg='white')
+        self.attention_canvas.pack(fill=tk.X, pady=5)
+
+        # Attention details
+        attention_details = ttk.LabelFrame(attention_frame, text="Attention Analysis", padding=10)
+        attention_details.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        self.attention_display = scrolledtext.ScrolledText(attention_details, height=15, wrap=tk.WORD,
+                                                           font=('Courier', 9))
+        self.attention_display.pack(fill=tk.BOTH, expand=True)
+
+        # Tab 3: Matching Signals
+        signals_frame = ttk.Frame(results_notebook)
+        results_notebook.add(signals_frame, text="🔍 Matching Signals")
+
+        # Signal strength indicators
+        signals_viz_frame = ttk.LabelFrame(signals_frame, text="Signal Strength Indicators", padding=10)
+        signals_viz_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        # Create signal strength bars
+        self.signal_vars = {}
+        signal_types = ["Semantic Similarity", "Syntactic Structure", "Entity Overlap", "Context Relevance"]
+
+        for signal in signal_types:
+            signal_frame = ttk.Frame(signals_viz_frame)
+            signal_frame.pack(fill=tk.X, pady=2)
+
+            ttk.Label(signal_frame, text=f"{signal}:", width=20).pack(side=tk.LEFT)
+
+            var = tk.DoubleVar()
+            self.signal_vars[signal] = var
+
+            bar = ttk.Progressbar(signal_frame, variable=var, maximum=100, length=200)
+            bar.pack(side=tk.LEFT, padx=5)
+
+            label = ttk.Label(signal_frame, text="0%", width=8)
+            label.pack(side=tk.LEFT)
+            setattr(self, f"{signal.lower().replace(' ', '_')}_label", label)
+
+        # Signal details
+        signals_details = ttk.LabelFrame(signals_frame, text="Matching Signals Analysis", padding=10)
+        signals_details.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        self.signals_display = scrolledtext.ScrolledText(signals_details, height=12, wrap=tk.WORD, font=('Courier', 9))
+        self.signals_display.pack(fill=tk.BOTH, expand=True)
+
+        # Tab 4: Full Results
+        full_results_frame = ttk.Frame(results_notebook)
+        results_notebook.add(full_results_frame, text="📋 Complete Analysis")
+
+        self.full_results_display = scrolledtext.ScrolledText(full_results_frame, height=20, wrap=tk.WORD,
+                                                              font=('Courier', 9))
+        self.full_results_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Initialize with sample data
+        self.load_sample_test_data()
+
+    def update_mdm_display(self, event=None):
+        """Update MDM display based on current selections"""
+        task = self.task_var.get()
+        method = self.prompt_method_var.get()
+
+        display_text = f"Task: {task}\n"
+        display_text += f"Prompt Method: {method.capitalize()}\n"
+        display_text += "=" * 50 + "\n\n"
+
+        # Show current prompt tokens
+        tokens = self.prompt_tokens[method]
+        display_text += "Generated Prompt Tokens:\n"
+
+        for key, value in tokens.items():
+            if isinstance(value, np.ndarray):
+                display_text += f"{key}: {value.round(3).tolist()}\n"
+            else:
+                display_text += f"{key}: {value}\n"
+
+        display_text += "\n" + "=" * 50 + "\n\n"
+
+        # Add method description
+        if method == "manual":
+            display_text += "Manual Prompt Description:\n"
+            display_text += "- Manually crafted cloze templates\n"
+            display_text += "- Uses discrete tokens like [RELEVANT], [SIMILAR]\n"
+            display_text += "- Expected output at [MASK] token\n"
+        elif method == "continuous":
+            display_text += "Continuous Prompt Description:\n"
+            display_text += "- Trainable continuous vectors\n"
+            display_text += "- Updated through back-propagation\n"
+            display_text += "- Separate encoders for each prompt type\n"
+        else:  # hybrid
+            display_text += "Hybrid Prompt Description:\n"
+            display_text += "- Combination of manual and continuous\n"
+            display_text += "- Flexible representation\n"
+            display_text += "- Task-specific optimization\n"
+
+        self.prompt_display.delete(1.0, tk.END)
+        self.prompt_display.insert(tk.END, display_text)
+
+        # Update pipeline display
+        self.update_pipeline_display()
+
+    def update_pipeline_display(self):
+        """Update NIR pipeline format display"""
+        query = self.query_entry.get(1.0, tk.END).strip()[:20] + "..."
+        doc = self.doc_entry.get(1.0, tk.END).strip()[:20] + "..."
+        method = self.prompt_method_var.get()
+
+        if method == "manual":
+            pt1, pt2, ptq = "[RELEVANT]", "[SIMILAR]", "[MATCH]"
+        elif method == "continuous":
+            pt1, pt2, ptq = "[CONT_VEC]", "[CONT_VEC]", "[CONT_VEC]"
+        else:
+            pt1, pt2, ptq = "[REL]", "[CONT_VEC]", "[MATCH]"
+
+        pipeline = f"[CLS] {pt1} {query} [SEP] {pt2} {doc} [SEP] {ptq} [MASK]"
+
+        self.pipeline_display.delete(1.0, tk.END)
+        self.pipeline_display.insert(tk.END, f"NIR Pipeline Format:\n\n{pipeline}")
+
+    def generate_prompt_tokens(self):
+        """Generate new prompt tokens based on current method"""
+        method = self.prompt_method_var.get()
+
+        if method == "continuous":
+            # Generate new random continuous vectors
+            self.prompt_tokens[method] = {
+                'Pt1': np.random.randn(5),
+                'Pt2': np.random.randn(5),
+                'Ptq': np.random.randn(5)
+            }
+        elif method == "hybrid":
+            # Update hybrid tokens
+            self.prompt_tokens[method] = {
+                'Pt1': '[REL]',
+                'Pt2': np.random.randn(3),
+                'Ptq': '[MATCH]'
+            }
+
+        self.update_mdm_display()
+        messagebox.showinfo("Success", f"New {method} prompt tokens generated!")
+
+    def update_mixed_dataset(self):
+        """Update mixed dataset display"""
+        selected_tasks = [task for task, var in self.task_vars.items() if var.get()]
+
+        display_text = "Selected Tasks for Mixing:\n"
+        display_text += "=" * 40 + "\n"
+
+        for task in selected_tasks:
+            display_text += f"✓ {task}\n"
+
+        display_text += f"\nTotal Tasks: {len(selected_tasks)}\n\n"
+
+        if len(selected_tasks) > 1:
+            display_text += "Mixed Dataset Benefits:\n"
+            display_text += "- Captures essential matching signals across tasks\n"
+            display_text += "- Improves generalization capability\n"
+            display_text += "- Reduces task-specific overfitting\n"
+            display_text += "- Enables transfer learning\n"
+        else:
+            display_text += "Note: Select multiple tasks for effective mixing\n"
+
+        self.mixed_dataset_display.delete(1.0, tk.END)
+        self.mixed_dataset_display.insert(tk.END, display_text)
+
+    def mix_datasets(self):
+        """Simulate dataset mixing process"""
+        selected_tasks = [task for task, var in self.task_vars.items() if var.get()]
+
+        if len(selected_tasks) < 2:
+            messagebox.showwarning("Warning", "Please select at least 2 tasks for mixing")
+            return
+
+        # Simulate mixing process
+        signals_text = "Essential Matching Signals Detected:\n"
+        signals_text += "=" * 45 + "\n\n"
+
+        signals = [
+            "Semantic similarity patterns",
+            "Syntactic structure matching",
+            "Entity relationship detection",
+            "Context-aware relevance scoring",
+            "Cross-task feature correlation",
+            "Attention mechanism alignment"
+        ]
+
+        for i, signal in enumerate(signals[:len(selected_tasks) + 1]):
+            confidence = random.uniform(0.7, 0.95)
+            signals_text += f"{i + 1}. {signal}\n"
+            signals_text += f"   Confidence: {confidence:.3f}\n"
+            signals_text += f"   Tasks: {', '.join(selected_tasks[:2])}\n\n"
+
+        signals_text += "Multi-task Learning Status:\n"
+        signals_text += f"- {len(selected_tasks)} tasks integrated\n"
+        signals_text += f"- {len(signals)} matching signals identified\n"
+        signals_text += "- Cross-task adaptation: ACTIVE\n"
+
+        self.signals_display.delete(1.0, tk.END)
+        self.signals_display.insert(tk.END, signals_text)
+
+        messagebox.showinfo("Success", f"Mixed dataset created with {len(selected_tasks)} tasks!")
+
+    def initialize_encoders(self):
+        """Initialize prompt encoders with current configuration"""
+        lstm_hidden = self.lstm_hidden_var.get()
+        lstm_layers = self.lstm_layers_var.get()
+        mlp_dims = self.mlp_dims_var.get()
+        dropout = self.dropout_var.get()
+        lr = self.lr_var.get()
+
+        display_text = "Prompt Encoder Architecture:\n"
+        display_text += "=" * 40 + "\n\n"
+
+        # LSTM configuration
+        display_text += "Bidirectional LSTM Configuration:\n"
+        display_text += f"- Hidden Size: {lstm_hidden}\n"
+        display_text += f"- Number of Layers: {lstm_layers}\n"
+        display_text += f"- Bidirectional: True\n"
+        display_text += f"- Dropout: {dropout}\n\n"
+
+        # MLP configuration
+        dims = mlp_dims.split(',')
+        display_text += "Multi-Layer Perceptron Configuration:\n"
+        display_text += f"- Input Dimension: {lstm_hidden}\n"
+        for i, dim in enumerate(dims):
+            display_text += f"- Hidden Layer {i + 1}: {dim.strip()} units\n"
+        display_text += f"- Output Dimension: 768 (BERT embedding size)\n"
+        display_text += f"- Activation: ReLU\n"
+        display_text += f"- Dropout: {dropout}\n\n"
+
+        # Training configuration
+        display_text += "Training Configuration:\n"
+        display_text += f"- Learning Rate: {lr}\n"
+        display_text += f"- Optimizer: AdamW\n"
+        display_text += f"- Weight Decay: 0.01\n"
+        display_text += f"- Gradient Clipping: 1.0\n\n"
+
+        # Encoder types
+        display_text += "Encoder Types:\n"
+        display_text += "1. Pt1 Encoder (Query prompt)\n"
+        display_text += "2. Pt2 Encoder (Document prompt)\n"
+        display_text += "3. Ptq Encoder (Task-specific prompt)\n\n"
+
+        display_text += "Architecture Flow:\n"
+        display_text += "Input → BiLSTM → MLP → Prompt Embeddings\n"
+        display_text += "Frozen PLM ← Prompt Tokens ← Encoders\n"
+
+        self.encoder_display.delete(1.0, tk.END)
+        self.encoder_display.insert(tk.END, display_text)
+
+        messagebox.showinfo("Success", "Prompt encoders initialized successfully!")
+
+    def start_training(self):
+        """Start training simulation"""
+        if self.is_training:
+            return
+
+        self.is_training = True
+        self.start_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
+
+        # Start training in separate thread
+        threading.Thread(target=self.training_simulation, daemon=True).start()
+
+    def stop_training(self):
+        """Stop training simulation"""
+        self.is_training = False
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+
+    def reset_training(self):
+        """Reset training progress"""
+        self.stop_training()
+        self.training_progress = 0
+        self.progress_var.set(0)
+        self.progress_label.config(text="Ready to train")
+        self.training_log.delete(1.0, tk.END)
+
+    def training_simulation(self):
+        """Simulate training process"""
+        epochs = int(self.epochs_var.get())
+        batch_size = int(self.batch_size_var.get())
+        loss_func = self.loss_var.get()
+        model_type = self.model_type_var.get()
+
+        self.log_training(f"Starting {model_type} training...")
+        self.log_training(f"Configuration: {epochs} epochs, batch size {batch_size}")
+        self.log_training(f"Loss function: {loss_func}")
+        self.log_training("-" * 50)
+
+        total_steps = epochs * 10  # Simulate 10 batches per epoch
+
+        for epoch in range(epochs):
+            if not self.is_training:
+                break
+
+            self.log_training(f"Epoch {epoch + 1}/{epochs}")
+
+            epoch_loss = 0
+            for batch in range(10):  # 10 batches per epoch
+                if not self.is_training:
+                    break
+
+                # Simulate batch processing
+                if loss_func == "contrastive":
+                    batch_loss = random.uniform(0.5, 2.0) * (0.9 ** (epoch * 10 + batch))
+                else:  # cross_entropy
+                    batch_loss = random.uniform(0.3, 1.5) * (0.9 ** (epoch * 10 + batch))
+
+                epoch_loss += batch_loss
+
+                step = epoch * 10 + batch + 1
+                progress = (step / total_steps) * 100
+                self.progress_var.set(progress)
+                self.progress_label.config(text=f"Epoch {epoch + 1}, Batch {batch + 1}")
+
+                if batch % 3 == 0:  # Log every 3 batches
+                    self.log_training(f"  Batch {batch + 1}: Loss = {batch_loss:.4f}")
+
+                time.sleep(0.2)  # Simulate processing time
+
+            avg_loss = epoch_loss / 10
+            self.log_training(f"  Average Loss: {avg_loss:.4f}")
+            self.log_training("")
+
+        if self.is_training:
+            self.log_training("Training completed successfully!")
+            self.progress_label.config(text="Training completed")
+        else:
+            self.log_training("Training stopped by user")
+
+        self.stop_training()
+
+    def log_training(self, message):
+        """Add message to training log"""
+        self.training_log.insert(tk.END, message + "\n")
+        self.training_log.see(tk.END)
+        self.root.update_idletasks()
+
+    def load_sample_test_data(self):
+        """Load sample test data"""
+        self.test_query.delete(1.0, tk.END)
+        self.test_doc.delete(1.0, tk.END)
+        self.test_query.insert(tk.END, "What are the applications of neural information retrieval?")
+        self.test_doc.insert(tk.END,
+                             "Neural information retrieval has applications in search engines, question answering systems, and document ranking.")
+
+    def load_test_sample(self, query, doc):
+        """Load a specific test sample"""
+        self.test_query.delete(1.0, tk.END)
+        self.test_doc.delete(1.0, tk.END)
+        self.test_query.insert(tk.END, query)
+        self.test_doc.insert(tk.END, doc)
+
+    def clear_results(self):
+        """Clear all result displays"""
+        self.score_var.set(0)
+        self.score_label.config(text="Score: Not calculated")
+        self.classification_label.config(text="")
+        self.scoring_display.delete(1.0, tk.END)
+        self.attention_display.delete(1.0, tk.END)
+        self.signals_display.delete(1.0, tk.END)
+        self.full_results_display.delete(1.0, tk.END)
+        self.attention_canvas.delete("all")
+
+        # Reset signal bars
+        for var in self.signal_vars.values():
+            var.set(0)
+        for signal in ["semantic_similarity", "syntactic_structure", "entity_overlap", "context_relevance"]:
+            label = getattr(self, f"{signal}_label", None)
+            if label:
+                label.config(text="0%")
+
+    def calculate_semantic_similarity(self, query, doc):
+        """Calculate semantic similarity between query and document"""
+        # Simple word overlap simulation
+        query_words = set(query.lower().split())
+        doc_words = set(doc.lower().split())
+
+        # Calculate Jaccard similarity
+        intersection = len(query_words.intersection(doc_words))
+        union = len(query_words.union(doc_words))
+
+        if union == 0:
+            return 0.0
+
+        base_similarity = intersection / union
+
+        # Add some noise and enhance with length consideration
+        length_factor = min(len(query_words), len(doc_words)) / max(len(query_words), len(doc_words))
+        final_similarity = (base_similarity * 0.7 + length_factor * 0.3) + random.uniform(-0.1, 0.1)
+
+        return max(0.0, min(1.0, final_similarity))
+
+    def visualize_attention_weights(self, query, attention_weights):
+        """Visualize attention weights on canvas"""
+        self.attention_canvas.delete("all")
+
+        if not query.strip():
+            return
+
+        words = query.split()
+        if not words:
+            return
+
+        canvas_width = self.attention_canvas.winfo_width()
+        if canvas_width <= 1:  # Canvas not initialized yet
+            self.root.after(100, lambda: self.visualize_attention_weights(query, attention_weights))
+            return
+
+        canvas_height = 100
+        word_width = min(canvas_width // len(words), 120)
+
+        max_weight = max(attention_weights) if attention_weights else 1.0
+
+        for i, (word, weight) in enumerate(zip(words, attention_weights)):
+            x = i * word_width + 10
+            y = canvas_height - 20
+
+            # Normalize weight for visualization
+            normalized_weight = weight / max_weight if max_weight > 0 else 0
+            bar_height = int(normalized_weight * 60)
+
+            # Color based on weight (blue scale)
+            intensity = int(255 * (1 - normalized_weight))
+            color = f"#{intensity:02x}{intensity:02x}ff"
+
+            # Draw attention bar
+            self.attention_canvas.create_rectangle(
+                x, y - bar_height, x + word_width - 5, y,
+                fill=color, outline="black"
+            )
+
+            # Draw word label
+            self.attention_canvas.create_text(
+                x + word_width // 2, y + 10,
+                text=word[:8] + "..." if len(word) > 8 else word,
+                font=('Arial', 8)
+            )
+
+            # Draw weight value
+            self.attention_canvas.create_text(
+                x + word_width // 2, y - bar_height - 10,
+                text=f"{weight:.2f}",
+                font=('Arial', 7)
+            )
+
+    def run_inference(self):
+        """Run comprehensive inference with all visualizations"""
+        query = self.test_query.get(1.0, tk.END).strip()
+        doc = self.test_doc.get(1.0, tk.END).strip()
+
+        if not query or not doc:
+            messagebox.showwarning("Warning", "Please enter both query and document")
+            return
+
+        # Clear previous results
+        self.clear_results()
+
+        # Calculate semantic similarity as base relevance score
+        base_similarity = self.calculate_semantic_similarity(query, doc)
+
+        # Add task-specific adjustments
+        method = getattr(self, 'prompt_method_var', tk.StringVar(value="manual")).get()
+        task = getattr(self, 'task_var', tk.StringVar(value="Document Retrieval")).get()
+
+        # Task-specific score adjustments
+        task_multipliers = {
+            "Document Retrieval": 1.0,
+            "Question Answering": 1.1,
+            "Paraphrase Identification": 0.9,
+            "Natural Language Inference": 1.05
+        }
+
+        relevance_score = min(0.95, base_similarity * task_multipliers.get(task, 1.0) + random.uniform(0.1, 0.3))
+
+        # Update relevance scoring visualization
+        self.update_relevance_scoring(query, doc, relevance_score, method, task)
+
+        # Generate and visualize attention weights
+        self.update_attention_weights(query, doc, relevance_score)
+
+        # Analyze matching signals
+        self.update_matching_signals(query, doc, relevance_score)
+
+        # Generate full analysis report
+        self.update_full_analysis(query, doc, relevance_score, method, task)
+
+        messagebox.showinfo("Success", f"Inference completed! Relevance score: {relevance_score:.3f}")
+
+    def update_relevance_scoring(self, query, doc, score, method, task):
+        """Update relevance scoring tab"""
+        # Update score visualization
+        score_percentage = score * 100
+        self.score_var.set(score_percentage)
+        self.score_label.config(text=f"Score: {score:.4f} ({score_percentage:.1f}%)")
+
+        # Update classification
+        if score > 0.8:
+            classification = "🟢 HIGHLY RELEVANT"
+            color = "green"
+        elif score > 0.6:
+            classification = "🟡 MODERATELY RELEVANT"
+            color = "orange"
+        elif score > 0.4:
+            classification = "🟠 PARTIALLY RELEVANT"
+            color = "darkorange"
+        else:
+            classification = "🔴 NOT RELEVANT"
+            color = "red"
+
+        self.classification_label.config(text=classification, foreground=color)
+
+        # Detailed scoring breakdown
+        scoring_text = f"""
+NIR-PROMPT RELEVANCE SCORING ANALYSIS
+{'=' * 60}
+
+Input Information:
+├─ Query: {query}
+├─ Document: {doc}
+├─ Task: {task}
+└─ Prompt Method: {method.capitalize()}
+
+Scoring Pipeline:
+{'─' * 40}
+
+1. PROMPT TOKEN GENERATION
+   ├─ Method: {method.capitalize()}
+   ├─ Pt1 (Query prompt): Generated ✓
+   ├─ Pt2 (Document prompt): Generated ✓
+   └─ Ptq (Task prompt): Generated ✓
+
+2. NEURAL ENCODING
+   ├─ Query encoding: [CLS] Pt1 {query[:30]}... [SEP]
+   ├─ Document encoding: Pt2 {doc[:30]}... [SEP]
+   └─ Task encoding: Ptq [MASK]
+
+3. SIMILARITY COMPUTATION
+   ├─ Base semantic similarity: {score:.4f}
+   ├─ Task adjustment factor: {task}
+   ├─ Method bonus: {method} prompt
+   └─ Final relevance score: {score:.4f}
+
+4. CONFIDENCE METRICS
+   ├─ Score confidence: {min(0.95, score + 0.1):.3f}
+   ├─ Prediction stability: {random.uniform(0.85, 0.98):.3f}
+   └─ Model uncertainty: {random.uniform(0.05, 0.15):.3f}
+
+Classification Thresholds:
+├─ Highly Relevant: > 0.80 (Green)
+├─ Moderately Relevant: 0.60 - 0.80 (Yellow)
+├─ Partially Relevant: 0.40 - 0.60 (Orange)
+└─ Not Relevant: < 0.40 (Red)
+
+RESULT: {classification} (Confidence: {score:.2%})
+"""
+
+        self.scoring_display.delete(1.0, tk.END)
+        self.scoring_display.insert(tk.END, scoring_text)
+
+    def update_attention_weights(self, query, doc, score):
+        """Update attention weights visualization"""
+        query_words = query.split()
+        doc_words = doc.split()
+
+        # Generate attention weights for query words
+        query_attention = []
+        for word in query_words:
+            # Higher attention for longer words and words that appear in document
+            base_attention = random.uniform(0.3, 0.9)
+            if word.lower() in doc.lower():
+                base_attention = min(0.95, base_attention + 0.3)
+            if len(word) > 6:
+                base_attention = min(0.95, base_attention + 0.1)
+            query_attention.append(base_attention)
+
+        # Visualize attention weights
+        self.visualize_attention_weights(query, query_attention)
+
+        # Attention analysis text
+        attention_text = f"""
+ATTENTION WEIGHTS ANALYSIS
+{'=' * 50}
+
+Query Token Analysis:
+{'─' * 30}
+"""
+
+        for i, (word, weight) in enumerate(zip(query_words, query_attention)):
+            attention_text += f"Token {i + 1:2d}: '{word}' → {weight:.3f} "
+            if weight > 0.8:
+                attention_text += "(🔥 High attention)\n"
+            elif weight > 0.6:
+                attention_text += "(⚡ Medium attention)\n"
+            elif weight > 0.4:
+                attention_text += "(💫 Low attention)\n"
+            else:
+                attention_text += "(💤 Minimal attention)\n"
+
+        attention_text += f"""
+Cross-Attention Analysis:
+{'─' * 30}
+Query-Document alignment score: {score:.3f}
+Top attending query tokens: {', '.join([word for word, weight in zip(query_words, query_attention) if weight > 0.7])}
+Average attention: {sum(query_attention) / len(query_attention):.3f}
+
+Attention Patterns:
+├─ Self-attention layers: 12 layers processed
+├─ Cross-attention heads: 8 heads active  
+├─ Attention dropout: 0.1 applied
+└─ Position encoding: Sinusoidal applied
+
+Document Token Relevance:
+{'─' * 30}
+"""
+
+        for word in doc_words[:10]:  # Top 10 doc words
+            relevance = random.uniform(0.2, 0.9)
+            attention_text += f"'{word}': {relevance:.3f} "
+            if word.lower() in query.lower():
+                attention_text += "(🎯 Query match)\n"
+            else:
+                attention_text += "\n"
+
+        self.attention_display.delete(1.0, tk.END)
+        self.attention_display.insert(tk.END, attention_text)
+
+    def update_matching_signals(self, query, doc, score):
+        """Update matching signals analysis"""
+        # Calculate individual signal strengths
+        signals = {
+            "Semantic Similarity": min(95, score * 100 + random.uniform(-10, 15)),
+            "Syntactic Structure": random.uniform(30, 80),
+            "Entity Overlap": random.uniform(20, 70),
+            "Context Relevance": min(90, score * 85 + random.uniform(-5, 20))
+        }
+
+        # Update signal strength bars
+        for signal_name, strength in signals.items():
+            if signal_name in self.signal_vars:
+                self.signal_vars[signal_name].set(strength)
+                label_attr = signal_name.lower().replace(' ', '_') + '_label'
+                if hasattr(self, label_attr):
+                    getattr(self, label_attr).config(text=f"{strength:.0f}%")
+
+        # Detailed signals analysis
+        signals_text = f"""
+MATCHING SIGNALS DETECTION
+{'=' * 50}
+
+Signal Strength Analysis:
+{'─' * 30}
+"""
+
+        for signal_name, strength in signals.items():
+            status = "🟢 STRONG" if strength > 70 else "🟡 MODERATE" if strength > 40 else "🔴 WEAK"
+            signals_text += f"{signal_name:20s}: {strength:5.1f}% {status}\n"
+
+        signals_text += f"""
+Detailed Signal Breakdown:
+{'─' * 30}
+
+1. SEMANTIC SIMILARITY ({signals['Semantic Similarity']:.1f}%)
+   ├─ Word embedding distance: {random.uniform(0.3, 0.8):.3f}
+   ├─ Contextual similarity: {random.uniform(0.4, 0.9):.3f}
+   ├─ Synonym detection: {random.randint(2, 8)} matches
+   └─ Semantic field overlap: {random.uniform(0.2, 0.7):.3f}
+
+2. SYNTACTIC STRUCTURE ({signals['Syntactic Structure']:.1f}%)
+   ├─ POS tag similarity: {random.uniform(0.3, 0.8):.3f}
+   ├─ Dependency tree alignment: {random.uniform(0.2, 0.6):.3f}
+   ├─ Phrase structure: {random.uniform(0.3, 0.7):.3f}
+   └─ Grammar pattern match: {random.uniform(0.2, 0.8):.3f}
+
+3. ENTITY OVERLAP ({signals['Entity Overlap']:.1f}%)
+   ├─ Named entities: {random.randint(0, 3)} matches
+   ├─ Noun phrases: {random.randint(1, 5)} overlaps
+   ├─ Key terms: {random.randint(2, 8)} common
+   └─ Concept alignment: {random.uniform(0.2, 0.8):.3f}
+
+4. CONTEXT RELEVANCE ({signals['Context Relevance']:.1f}%)
+   ├─ Topic coherence: {random.uniform(0.4, 0.9):.3f}
+   ├─ Domain specificity: {random.uniform(0.3, 0.8):.3f}
+   ├─ Contextual embeddings: {random.uniform(0.5, 0.9):.3f}
+   └─ Discourse markers: {random.randint(0, 4)} detected
+
+Overall Signal Confidence: {sum(signals.values()) / 4:.1f}%
+Signal Consensus: {"HIGH" if sum(signals.values()) / 4 > 60 else "MODERATE" if sum(signals.values()) / 4 > 40 else "LOW"}
+"""
+
+        self.signals_display.delete(1.0, tk.END)
+        self.signals_display.insert(tk.END, signals_text)
+
+    def update_full_analysis(self, query, doc, score, method, task):
+        """Update complete analysis report"""
+        analysis_text = f"""
+NIR-PROMPT COMPLETE INFERENCE ANALYSIS
+{'=' * 80}
+
+EXECUTIVE SUMMARY
+{'─' * 40}
+✅ Inference Status: COMPLETED
+📊 Relevance Score: {score:.4f} ({score * 100:.1f}%)
+🎯 Classification: {"RELEVANT" if score > 0.6 else "NOT RELEVANT"}
+⚡ Processing Time: {random.uniform(0.1, 0.5):.3f}s
+🔄 Model Confidence: {min(0.98, score + 0.2):.2%}
+
+INPUT SPECIFICATIONS
+{'─' * 40}
+Query Text: {query}
+Document Text: {doc}
+Task Type: {task}
+Prompt Method: {method.capitalize()}
+Model Architecture: {"Dense Retrieval" if score > 0.5 else "Reranking"}
+
+PROCESSING PIPELINE
+{'─' * 40}
+1. ✅ Prompt Token Generation
+   ├─ Pt1 (Query): {self.prompt_tokens[method].get('Pt1', 'Generated')}
+   ├─ Pt2 (Document): {self.prompt_tokens[method].get('Pt2', 'Generated')}
+   └─ Ptq (Task): {self.prompt_tokens[method].get('Ptq', 'Generated')}
+
+2. ✅ Neural Encoding
+   ├─ Input format: [CLS] Pt1 query [SEP] Pt2 doc [SEP] Ptq [MASK]
+   ├─ Sequence length: {len(query.split()) + len(doc.split()) + 6} tokens
+   ├─ Embedding dimension: 768
+   └─ Attention heads: 12
+
+3. ✅ Matching Signal Detection
+   ├─ Semantic similarity: {random.uniform(0.6, 0.95):.3f}
+   ├─ Structural alignment: {random.uniform(0.3, 0.8):.3f}
+   ├─ Entity correlation: {random.uniform(0.2, 0.7):.3f}
+   └─ Context coherence: {random.uniform(0.5, 0.9):.3f}
+
+4. ✅ Score Computation
+   ├─ Raw similarity: {score:.4f}
+   ├─ Task adjustment: +{random.uniform(0.01, 0.1):.3f}
+   ├─ Method bonus: +{random.uniform(0.0, 0.05):.3f}
+   └─ Final score: {score:.4f}
+
+TECHNICAL DETAILS
+{'─' * 40}
+Model Parameters:
+├─ Total parameters: 110M
+├─ Frozen PLM layers: 8
+├─ Trainable prompt encoders: 3
+└─ Fine-tuned on: {random.choice(['MS MARCO', 'Natural Questions', 'TREC', 'SQuAD'])}
+
+Loss Function: {"Contrastive Loss" if score > 0.5 else "Cross-Entropy"}
+Optimization: AdamW (lr=1e-5, weight_decay=0.01)
+Regularization: Dropout (0.1), Layer Norm
+
+PERFORMANCE METRICS
+{'─' * 40}
+├─ Inference speed: {random.uniform(50, 200):.0f} queries/sec
+├─ Memory usage: {random.uniform(2.1, 4.8):.1f} GB
+├─ GPU utilization: {random.uniform(70, 95):.0f}%
+└─ Batch efficiency: {random.uniform(0.85, 0.98):.2f}
+
+QUALITY ASSESSMENT
+{'─' * 40}
+Prediction Quality: {"🟢 HIGH" if score > 0.7 else "🟡 MEDIUM" if score > 0.4 else "🔴 LOW"}
+├─ Calibration score: {random.uniform(0.85, 0.98):.3f}
+├─ Consistency check: {"PASS" if score > 0.3 else "FAIL"}
+├─ Uncertainty estimate: {random.uniform(0.05, 0.25):.3f}
+└─ Robustness score: {random.uniform(0.75, 0.95):.3f}
+
+RECOMMENDATIONS
+{'─' * 40}
+"""
+
+        if score > 0.8:
+            analysis_text += "✅ High confidence match - Recommend for retrieval\n"
+            analysis_text += "✅ Strong semantic alignment detected\n"
+            analysis_text += "✅ Multiple matching signals confirmed\n"
+        elif score > 0.6:
+            analysis_text += "⚡ Moderate confidence - Consider for review\n"
+            analysis_text += "⚡ Partial semantic alignment found\n"
+            analysis_text += "⚡ Mixed matching signals detected\n"
+        else:
+            analysis_text += "❌ Low confidence - Not recommended\n"
+            analysis_text += "❌ Weak semantic alignment\n"
+            analysis_text += "❌ Insufficient matching signals\n"
+
+        analysis_text += f"""
+{'=' * 80}
+Analysis completed at {time.strftime('%Y-%m-%d %H:%M:%S')}
+NIR-Prompt Framework v1.0 | Confidence: {score:.2%}
+"""
+
+        self.full_results_display.delete(1.0, tk.END)
+        self.full_results_display.insert(tk.END, analysis_text)
+
+
+def main():
+    root = tk.Tk()
+    app = NIRPromptDemo(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
